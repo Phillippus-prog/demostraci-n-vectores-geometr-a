@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Demostración LBS Avanzada: Multiplicación Detallada</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            margin: 0;
+            padding: 20px;
+            background-color: #121212;
+            color: #ffffff;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        #lado-visual {
+            flex: 1.1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-right: 2px solid #333;
+            padding-right: 20px;
+        }
+        #lado-matematico {
+            flex: 1.3;
+            padding-left: 20px;
+            overflow-y: auto;
+        }
+        canvas {
+            background-color: #1a1a1a;
+            border: 2px solid #00ffcc;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+        }
+        .controles {
+            margin-top: 15px;
+            width: 90%;
+            background: #222;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .control-group input { width: 50%; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.8em;
+        }
+        th, td {
+            border: 1px solid #444;
+            padding: 5px;
+            text-align: center;
+        }
+        th { background-color: #00ffcc; color: #121212; }
+        .formula-box {
+            background-color: #222;
+            padding: 10px;
+            border-left: 4px solid #ff0055;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+        }
+        .desglose-operacion {
+            background-color: #1a1a1a;
+            border: 1px dashed #ff0055;
+            padding: 12px;
+            margin-top: 20px;
+            border-radius: 6px;
+        }
+        .matriz {
+            display: inline-block;
+            border-left: 2px solid #00ffcc;
+            border-right: 2px solid #00ffcc;
+            padding: 0 5px;
+            vertical-align: middle;
+            font-size: 0.85em;
+        }
+        .matriz-fila { display: flex; justify-content: space-between; width: 130px; }
+        .matriz-celda { width: 40px; text-align: right; }
+        .vector {
+            display: inline-block;
+            border-left: 2px solid #ff0055;
+            border-right: 2px solid #ff0055;
+            padding: 0 6px;
+            vertical-align: middle;
+            text-align: center;
+            font-size: 0.85em;
+        }
+        .signo { font-size: 18px; margin: 0 5px; color: #ff0055; vertical-align: middle; }
+        .verde { color: #00ffcc; }
+        .rosa { color: #ff0055; }
+        .amarillo { color: #ffff00; }
+    </style>
+</head>
+<body>
+
+    <div id="lado-visual">
+        <h3>Malla Deformable (Plano de Vértices)</h3>
+        <canvas id="canvas" width="460" height="380"></canvas>
+        
+        <div class="controles">
+            <div class="control-group">
+                <label>Rotación Hueso 1 (Brazo): <span id="val-h1" class="verde">0</span>°</label>
+                <input type="range" id="rot-h1" min="-60" max="60" value="0">
+            </div>
+            <div class="control-group">
+                <label>Rotación Hueso 2 (Antebrazo): <span id="val-h2" class="verde">0</span>°</label>
+                <input type="range" id="rot-h2" min="-90" max="90" value="0">
+            </div>
+        </div>
+    </div>
+
+    <div id="lado-matematico">
+        <div class="formula-box">
+            <strong>Ecuación de tu PPT:</strong><br>
+            $$\vec{v}' = \sum_{i=1}^{2} w_i \cdot (M_i \cdot \vec{v})$$
+        </div>
+
+        <h3>1. Seguimiento General</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Vértice</th>
+                    <th>Pos. Original (v)</th>
+                    <th>w₁</th>
+                    <th>w₂</th>
+                    <th>Pos. Destino (v')</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-vertices"></tbody>
+        </table>
+
+        <div class="desglose-operacion">
+            <h4 style="margin: 0 0 10px 0; color: #ff0055;">2. Desarrollo Aritmético Completo (Para V2 - Codo)</h4>
+            <p style="font-size: 0.8em; color: #aaa; margin: 0 0 15px 0;">Aquí ves exactamente los números multiplicándose dentro de la sumatoria:</p>
+            
+            <div style="margin-bottom: 15px;">
+                <span class="amarillo">Hueso 1:</span> Peso(<span class="verde">0.50</span>) <span class="signo">·</span> 
+                <div class="matriz" id="calc-m1"></div>
+                <span class="signo">·</span>
+                <div class="vector">150<br>-30<br>1</div>
+                <span class="signo">=</span>
+                <div class="vector" id="calc-res1" style="border-color: #ffff00;"></div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <span class="amarillo">Hueso 2:</span> Peso(<span class="verde">0.50</span>) <span class="signo">·</span> 
+                <div class="matriz" id="calc-m2"></div>
+                <span class="signo">·</span>
+                <div class="vector">150<br>-30<br>1</div>
+                <span class="signo">=</span>
+                <div class="vector" id="calc-res2" style="border-color: #ffff00;"></div>
+            </div>
+
+            <div style="border-top: 1px solid #444; padding-top: 10px; font-size: 0.95em;">
+                <span class="rosa">Sumatoria (v'):</span> 
+                <div class="vector" id="sum-v1" style="border-color: #ffff00;"></div>
+                <span class="signo">+</span>
+                <div class="vector" id="sum-v2" style="border-color: #ffff00;"></div>
+                <span class="signo">=</span>
+                <div class="vector" id="v-final-homogeneo" style="border-color: #00ffcc; font-weight: bold;"></div>
+                <span style="font-size: 0.85em; margin-left: 10px;">En pantalla: <span id="v-final-plano" class="verde"></span></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const origenX = 80, origenY = 200, largoHueso = 150;
+
+        const sliderH1 = document.getElementById('rot-h1');
+        const sliderH2 = document.getElementById('rot-h2');
+
+        // Malla del sprite (Usaremos V2 para el desglose detallado)
+        const verticesOriginales = [
+            { id: 0, x: 0,   y: -30, w1: 1.0, w2: 0.0 },
+            { id: 1, x: 0,   y: 30,  w1: 1.0, w2: 0.0 },
+            { id: 2, x: 150, y: -30, w1: 0.5, w2: 0.5 }, // <-- ESTE ES NUESTRO VÉRTICE DE ESTUDIO (Codo)
+            { id: 3, x: 150, y: 30,  w1: 0.5, w2: 0.5 },
+            { id: 4, x: 220, y: -30, w1: 0.1, w2: 0.9 },
+            { id: 5, x: 220, y: 30,  w1: 0.1, w2: 0.9 },
+            { id: 6, x: 300, y: -30, w1: 0.0, w2: 1.0 },
+            { id: 7, x: 300, y: 30,  w1: 0.0, w2: 1.0 }
+        ];
+
+        const indicesConstruccion = [
+            [0,1],[0,2],[1,3],[2,3],[2,4],[3,5],[4,5],[4,6],[5,7],[6,7],[0,3],[2,5],[4,7]
+        ];
+
+        // ÁLGEBRA MATRICIAL 3x3
+        function crearTraslacion(tx, ty) { return [1, 0, tx,  0, 1, ty,  0, 0, 1]; }
+        function crearRotacion(grados) {
+            const rad = grados * Math.PI / 180;
+            const c = Math.cos(rad), s = Math.sin(rad);
+            return [c, -s, 0,  s, c, 0,  0, 0, 1];
+        }
+        function multiplicar(A, B) {
+            const C = new Array(9);
+            for(let i=0; i<3; i++) {
+                for(let j=0; j<3; j++) {
+                    C[i*3+j] = A[i*3]*B[j] + A[i*3+1]*B[3+j] + A[i*3+2]*B[6+j];
+                }
+            }
+            return C;
+        }
+        function transformarVector(M, v) {
+            return {
+                x: M[0]*v.x + M[1]*v.y + M[2],
+                y: M[3]*v.x + M[4]*v.y + M[5]
+            };
+        }
+
+        // Renderizar bloques de código HTML para las matrices del desglose
+        function construirMatrizHTML(mat) {
+            let html = '';
+            for(let i=0; i<3; i++) {
+                html += '<div class="matriz-fila">';
+                for(let j=0; j<3; j++) {
+                    html += `<span class="matriz-celda">${mat[i*3+j].toFixed(1)}</span>`;
+                }
+                html += '</div>';
+            }
+            return html;
+        }
+
+        function dibujarPlanoCartesiano() {
+            ctx.strokeStyle = "#252525"; ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+            for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, origenY); ctx.lineTo(canvas.width, origenY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(origenX, 0); ctx.lineTo(origenX, canvas.height); ctx.stroke();
+        }
+
+        function actualizar() {
+            const ang1 = parseFloat(sliderH1.value);
+            const ang2 = parseFloat(sliderH2.value);
+
+            document.getElementById('val-h1').innerText = ang1;
+            document.getElementById('val-h2').innerText = ang2;
+
+            // Matrices globales del esqueleto
+            const M1 = multiplicar(crearTraslacion(origenX, origenY), crearRotacion(ang1));
+            const M_codo_articulacion = multiplicar(M1, crearTraslacion(largoHueso, 0));
+            const M2 = multiplicar(M_codo_articulacion, crearRotacion(ang2));
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            dibujarPlanoCartesiano();
+
+            const verticesTransformados = [];
+            let tablaHtml = '';
+
+            // Guardaremos datos intermedios exclusivamente de V2 para mostrarlos abajo
+            let datosV2 = {};
+
+            verticesOriginales.forEach(v => {
+                const posH1 = transformarVector(M1, v);
+                const posH2 = transformarVector(M2, v);
+
+                // SUMATORIA PONDERADA: v' = w₁·(M₁·v) + w₂·(M₂·v)
+                const finalX = (posH1.x * v.w1) + (posH2.x * v.w2);
+                const finalY = (posH1.y * v.w1) + (posH2.y * v.w2);
+
+                verticesTransformados.push({ x: finalX, y: finalY });
+
+                const cartX = (finalX - origenX).toFixed(1);
+                const cartY = (origenY - finalY).toFixed(1);
+
+                // Si es el Vértice 2, salvamos los pasos exactos de la multiplicación
+                if(v.id === 2) {
+                    datosV2 = {
+                        m1_v_x: posH1.x, m1_v_y: posH1.y, // Resultado intermedio de la Matriz por el Vector
+                        m2_v_x: posH2.x, m2_v_y: posH2.y,
+                        w_m1_v_x: posH1.x * v.w1, w_m1_v_y: posH1.y * v.w1, // Ya ponderado por el peso
+                        w_m2_v_x: posH2.x * v.w2, w_m2_v_y: posH2.y * v.w2,
+                        fX: finalX, fY: finalY,
+                        cX: cartX, cY: cartY
+                    };
+                }
+
+                let claseDestaque = (v.id === 2) ? 'class="destaque"' : '';
+                tablaHtml += `<tr ${claseDestaque}>
+                    <td>V${v.id}</td>
+                    <td>(${v.x}, ${v.y})</td>
+                    <td>${v.w1.toFixed(1)}</td>
+                    <td>${v.w2.toFixed(1)}</td>
+                    <td class="verde">(${cartX}, ${cartY})</td>
+                </tr>`;
+            });
+
+            document.getElementById('tabla-vertices').innerHTML = tablaHtml;
+
+            // --- INYECTAR LA ARITMÉTICA DE MUESTRA PARA EL VÉRTICE 2 EN EL PANEL INFERIOR ---
+            document.getElementById('calc-m1').innerHTML = construirMatrizHTML(M1);
+            document.getElementById('calc-m2').innerHTML = construirMatrizHTML(M2);
+
+            // Mostrar el vector resultante ponderado por el peso: w * (M * v)
+            document.getElementById('calc-res1').innerHTML = `${datosV2.w_m1_v_x.toFixed(1)}<br>${datosV2.w_m1_v_y.toFixed(1)}<br>0.5`;
+            document.getElementById('calc-res2').innerHTML = `${datosV2.w_m2_v_x.toFixed(1)}<br>${datosV2.w_m2_v_y.toFixed(1)}<br>0.5`;
+
+            // Mostrar la suma final paso a paso
+            document.getElementById('sum-v1').innerHTML = `${datosV2.w_m1_v_x.toFixed(1)}<br>${datosV2.w_m1_v_y.toFixed(1)}<br>0.5`;
+            document.getElementById('sum-v2').innerHTML = `${datosV2.w_m2_v_x.toFixed(1)}<br>${datosV2.w_m2_v_y.toFixed(1)}<br>0.5`;
+            
+            // Resultado de la sumatoria homogénea
+            document.getElementById('v-final-homogeneo').innerHTML = `${datosV2.fX.toFixed(1)}<br>${datosV2.fY.toFixed(1)}<br>1.0`;
+            // Resultado mapeado al plano visual cartesiano del profesor
+            document.getElementById('v-final-plano').innerText = `(${datosV2.cX}, ${datosV2.cY})`;
+
+
+            // RENDERIZADO VISUAL DE LA MALLA
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.4)"; ctx.lineWidth = 1;
+            indicesConstruccion.forEach(par => {
+                ctx.beginPath(); ctx.moveTo(verticesTransformados[par[0]].x, verticesTransformados[par[0]].y);
+                ctx.lineTo(verticesTransformados[par[1]].x, verticesTransformados[par[1]].y); ctx.stroke();
+            });
+
+            verticesOriginales.forEach((v, i) => {
+                const pt = verticesTransformados[i];
+                ctx.fillStyle = (v.id === 2) ? "#ff0055" : "#00ffcc";
+                ctx.beginPath(); ctx.arc(pt.x, pt.y, (v.id === 2) ? 7 : 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#fff"; ctx.fillText("V" + v.id, pt.x + 8, pt.y - 4);
+            });
+
+            // Huesos de referencia
+            ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(origenX, origenY); ctx.lineTo(M_codo_articulacion[2], M_codo_articulacion[5]); ctx.stroke();
+            ctx.strokeStyle = "#ff0055";
+            const manoX = M2[0]*largoHueso + M2[2]; const manoY = M2[3]*largoHueso + M2[5];
+            ctx.beginPath(); ctx.moveTo(M_codo_articulacion[2], M_codo_articulacion[5]); ctx.lineTo(manoX, manoY); ctx.stroke();
+        }
+
+        sliderH1.addEventListener('input', actualizar);
+        sliderH2.addEventListener('input', actualizar);
+        actualizar();
+    </script>
+</body>
+</html>

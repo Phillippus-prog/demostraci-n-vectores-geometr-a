@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Demostración FFD Avanzada: Deformación Pixel-Art</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            margin: 0;
+            padding: 20px;
+            background-color: #121212;
+            color: #ffffff;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        #lado-visual {
+            flex: 1.1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-right: 2px solid #333;
+            padding-right: 20px;
+        }
+        #lado-matematico {
+            flex: 1.3;
+            padding-left: 20px;
+            overflow-y: auto;
+        }
+        canvas {
+            background-color: #1a1a1a;
+            border: 2px solid #ffaa00;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .formula-box {
+            background-color: #222;
+            padding: 12px;
+            border-left: 4px solid #ffaa00;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .desglose-operacion {
+            background-color: #1a1a1a;
+            border: 1px dashed #ffaa00;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 6px;
+        }
+        .vector {
+            display: inline-block;
+            border-left: 2px solid #ffaa00;
+            border-right: 2px solid #ffaa00;
+            padding: 0 6px;
+            vertical-align: middle;
+            text-align: center;
+            font-size: 0.9em;
+        }
+        .signo { font-size: 18px; margin: 0 3px; color: #ffaa00; vertical-align: middle; }
+        .verde { color: #00ffcc; }
+        .amarillo { color: #ffaa00; }
+        .instrucciones { font-size: 0.8em; color: #aaa; margin-bottom: 10px; }
+        .efecto-info { font-size: 0.85em; color: #ffaa00; font-weight: bold; margin-top: 10px; text-align: center;}
+    </style>
+</head>
+<body>
+
+    <div id="lado-visual">
+        <h3>Deformación de Forma Libre (FFD 2D Pixel-Art)</h3>
+        <p class="instrucciones">¡Arrastra las esquinas rojas! Simula el clásico efecto <strong>Squash & Stretch</strong> al saltar o caer en videojuegos.</p>
+        <canvas id="canvas" width="460" height="380"></canvas>
+        <div class="efecto-info" id="txt-efecto">Estado: Reposo geométrico</div>
+    </div>
+
+    <div id="lado-matematico">
+        <div class="formula-box">
+            <strong>Fórmula de Interpolación Bilineal (FFD):</strong><br>
+            v' = (1-u)(1-v)P00 + u(1-v)P10 + (1-u)vP01 + uvP11
+        </div>
+
+        <h3>Desarrollo Aritmético en Vivo</h3>
+        <p style="font-size: 0.8em; color: #ccc;">Analizando un píxel clave en el centro del sprite (<span class="verde">u: 0.5, v: 0.5</span>):</p>
+
+        <div class="desglose-operacion">
+            <div style="margin-bottom: 12px;">
+                P00 (Inf-Izq): (1-0.5)(1-0.5) <span class="signo">·</span> <div class="vector" id="c-p00"></div> 
+                <span class="signo">=</span> <div class="vector" id="r-p00" style="border-color: #00ffcc;"></div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                P10 (Inf-Der): 0.5·(1-0.5) <span class="signo">·</span> <div class="vector" id="c-p10"></div> 
+                <span class="signo">=</span> <div class="vector" id="r-p10" style="border-color: #00ffcc;"></div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                P01 (Sup-Izq): (1-0.5)·0.5 <span class="signo">·</span> <div class="vector" id="c-p01"></div> 
+                <span class="signo">=</span> <div class="vector" id="r-p01" style="border-color: #00ffcc;"></div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                P11 (Sup-Der): 0.5·0.5 <span class="signo">·</span> <div class="vector" id="c-p11"></div> 
+                <span class="signo">=</span> <div class="vector" id="r-p11" style="border-color: #00ffcc;"></div>
+            </div>
+
+            <div style="border-top: 1px solid #444; padding-top: 10px; font-size: 1em;">
+                <span class="amarillo">Suma de Componentes Combinados (v'):</span><br><br>
+                <div class="vector" id="s-p00" style="border-color: #00ffcc;"></div> <span class="signo">+</span>
+                <div class="vector" id="s-p10" style="border-color: #00ffcc;"></div> <span class="signo">+</span>
+                <div class="vector" id="s-p01" style="border-color: #00ffcc;"></div> <span class="signo">+</span>
+                <div class="vector" id="s-p11" style="border-color: #00ffcc;"></div> <span class="signo">=</span>
+                <div class="vector" id="v-final" style="border-color: #ffaa00; font-weight: bold;"></div>
+                <br><br>
+                <span>Coordenada Calculada en el Plano: <span id="v-plano-cart" class="verde"></span></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const origenX = 230, origenY = 190; // Centro del plano coordenado
+
+        // Esquinas iniciales de la jaula de deformación
+        let jaula = [
+            { id: 0, x: 130, y: 290 }, // P00
+            { id: 1, x: 330, y: 290 }, // P10
+            { id: 2, x: 130, y: 90  }, // P01
+            { id: 3, x: 330, y: 90  }  // P11
+        ];
+
+        // Matriz de píxeles para construir un hongo/personaje pixelart reconocible (12x12)
+        const spritePixelArt = [
+            [0,0,0,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,3,1,1,1,1,3,1,1,0],
+            [0,1,1,3,1,1,1,1,3,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1],
+            [0,0,0,2,2,2,2,2,2,0,0,0],
+            [0,0,2,2,3,2,2,3,2,2,0,0],
+            [0,0,2,2,3,2,2,3,2,2,0,0],
+            [0,0,2,2,2,2,2,2,2,2,0,0],
+            [0,0,0,2,2,2,2,2,2,0,0,0],
+            [0,0,0,3,3,0,0,3,3,0,0,0]
+        ];
+
+        const filasSprite = spritePixelArt.length;
+        const columnasSprite = spritePixelArt[0].length;
+
+        let puntoSeleccionado = null;
+
+        function dibujarPlano() {
+            ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+            for (let y = 0; y < canvas.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(0, origenY); ctx.lineTo(canvas.width, origenY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(origenX, 0); ctx.lineTo(origenX, canvas.height); ctx.stroke();
+        }
+
+        // FÓRMULA DE INTERPOLACIÓN BILINEAL
+        function interpolarBilinear(u, v) {
+            const p00 = jaula[0], p10 = jaula[1], p01 = jaula[2], p11 = jaula[3];
+            const x = (1-u)*(1-v)*p00.x + u*(1-v)*p10.x + (1-u)*v*p01.x + u*v*p11.x;
+            const y = (1-u)*(1-v)*p00.y + u*(1-v)*p10.y + (1-u)*v*p01.y + u*v*p11.y;
+            return { x: x, y: y };
+        }
+
+        function actualizar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            dibujarPlano();
+
+            const altoActual = Math.abs((jaula[2].y + jaula[3].y)/2 - (jaula[0].y + jaula[1].y)/2);
+            let infoEfecto = "Estado: Reposo geométrico";
+            if(altoActual < 160) infoEfecto = "Efecto: ¡SQUASH! (Aplastado por impacto/caída)";
+            if(altoActual > 230) infoEfecto = "Efecto: ¡STRETCH! (Estirado por impulso de salto)";
+
+            document.getElementById('txt-efecto').innerText = infoEfecto;
+
+            // MAPEADO Y DEFORMACIÓN DE LOS PÍXELES INDIVIDUALES
+            for (let r = 0; r < filasSprite; r++) {
+                for (let c = 0; c < columnasSprite; c++) {
+                    const tipoPixel = spritePixelArt[r][c];
+                    if (tipoPixel === 0) continue;
+
+                    const u = c / (columnasSprite - 1);
+                    const v = 1.0 - (r / (filasSprite - 1));
+
+                    const posFinal = interpolarBilinear(u, v);
+
+                    if (tipoPixel === 1) ctx.fillStyle = "#ff2222"; 
+                    if (tipoPixel === 2) ctx.fillStyle = "#ffcc99"; 
+                    if (tipoPixel === 3) ctx.fillStyle = "#ffffff"; 
+
+                    ctx.fillRect(posFinal.x - 6, posFinal.y - 6, 12, 12);
+                }
+            }
+
+            const posCentro = interpolarBilinear(0.5, 0.5);
+            ctx.fillStyle = "#ffff00";
+            ctx.beginPath(); ctx.arc(posCentro.x, posCentro.y, 5, 0, Math.PI * 2); ctx.fill();
+
+            // RENDEREAR LA JAULA EXTERIOR
+            ctx.strokeStyle = "#ffaa00"; ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(jaula[0].x, jaula[0].y); ctx.lineTo(jaula[1].x, jaula[1].y);
+            ctx.lineTo(jaula[3].x, jaula[3].y); ctx.lineTo(jaula[2].x, jaula[2].y);
+            ctx.closePath(); ctx.stroke();
+            ctx.setLineDash([]); 
+
+            jaula.forEach(p => {
+                ctx.fillStyle = "#ff3333";
+                ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
+            });
+
+            // INYECTAR DATOS NÚMERICOS
+            const p00 = jaula[0], p10 = jaula[1], p01 = jaula[2], p11 = jaula[3];
+            
+            document.getElementById('c-p00').innerHTML = `${(p00.x-origenX)}<br>${(origenY-p00.y)}`;
+            document.getElementById('c-p10').innerHTML = `${(p10.x-origenX)}<br>${(origenY-p10.y)}`;
+            document.getElementById('c-p01').innerHTML = `${(p01.x-origenX)}<br>${(origenY-p01.y)}`;
+            document.getElementById('c-p11').innerHTML = `${(p11.x-origenX)}<br>${(origenY-p11.y)}`;
+
+            const r00_x = 0.25 * (p00.x-origenX), r00_y = 0.25 * (origenY-p00.y);
+            const r10_x = 0.25 * (p10.x-origenX), r10_y = 0.25 * (origenY-p10.y);
+            const r01_x = 0.25 * (p01.x-origenX), r01_y = 0.25 * (origenY-p01.y);
+            const r11_x = 0.25 * (p11.x-origenX), r11_y = 0.25 * (origenY-p11.y);
+
+            document.getElementById('r-p00').innerHTML = `${r00_x.toFixed(1)}<br>${r00_y.toFixed(1)}`;
+            document.getElementById('r-p10').innerHTML = `${r10_x.toFixed(1)}<br>${r10_y.toFixed(1)}`;
+            document.getElementById('r-p01').innerHTML = `${r01_x.toFixed(1)}<br>${r01_y.toFixed(1)}`;
+            document.getElementById('r-p11').innerHTML = `${r11_x.toFixed(1)}<br>${r11_y.toFixed(1)}`;
+
+            document.getElementById('s-p00').innerHTML = `${r00_x.toFixed(1)}<br>${r00_y.toFixed(1)}`;
+            document.getElementById('s-p10').innerHTML = `${r10_x.toFixed(1)}<br>${r10_y.toFixed(1)}`;
+            document.getElementById('s-p01').innerHTML = `${r01_x.toFixed(1)}<br>${r01_y.toFixed(1)}`;
+            document.getElementById('s-p11').innerHTML = `${r11_x.toFixed(1)}<br>${r11_y.toFixed(1)}`;
+
+            const fX = r00_x + r10_x + r01_x + r11_x;
+            const fY = r00_y + r10_y + r01_y + r11_y;
+            document.getElementById('v-final').innerHTML = `${fX.toFixed(1)}<br>${fY.toFixed(1)}`;
+            document.getElementById('v-plano-cart').innerText = `(${fX.toFixed(1)}, ${fY.toFixed(1)})`;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            jaula.forEach(p => {
+                const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
+                if(dist < 15) puntoSeleccionado = p;
+            });
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if(!puntoSeleccionado) return;
+            const rect = canvas.getBoundingClientRect();
+            puntoSeleccionado.x = e.clientX - rect.left;
+            puntoSeleccionado.y = e.clientY - rect.top;
+            actualizar();
+        });
+
+        window.addEventListener('mouseup', () => { puntoSeleccionado = null; });
+
+        actualizar();
+    </script>
+</body>
+</html>
